@@ -6,6 +6,9 @@ This project explores machine learning techniques for predicting the survival of
 
 The project aims to compare the ***performance of both models*** and evaluate their **effectiveness** in predicting passenger `survival`.
 
+## Key R Markdown File
+This project contains an important `.Rmd` file that demonstrates moeddling using `tidymodel`. You can view the R Markdown file here: [link_to_file](MN_TM.Rmd).
+
 ## Objective
 
 The objective of this project is to:
