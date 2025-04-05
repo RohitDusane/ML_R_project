@@ -68,8 +68,3 @@ The objective of this project is to:
 - `ggplot2`
 - `randomForest`
 - `dplyr`
-## Getting Started
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/your-username/titanic-ml-models.git
