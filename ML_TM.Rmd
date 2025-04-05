@@ -1,0 +1,672 @@
+---
+title: "Titanic Dataset - ML Using Tidymodles"
+author: "Rohit Ravindra Dusane"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Machine Leanring with Tidymodels - Tutorials  
+
+In this tutorial we will work on the famous `Titanic Dataset` for a classification problem to predict the survival of people. We use the `Tidymodels` framework to build `recipe`, `build model` and `workflow`, testing the accuracy and predict the probabilities of survival.
+
+## 1. Loading Libraries
+
+```{r  warning=FALSE}
+suppressPackageStartupMessages({
+### loading tidyverse/ tidymodels packages
+library(tidyverse) #core tidyverse
+library(tidymodels) # tidymodels framework
+library(lubridate) # date/time handling
+library(finetune) # fine tuning models
+
+
+### visualization
+library(viridis) #color scheme that is colorblind friendly
+library(ggthemes) # themes for ggplot
+library(gt) # to make nice tables
+library(cowplot) # to make multi-panel figures
+library(corrplot) # nice correlation plot
+library(readr) # reading the csv dataset
+
+### Data Cleaning
+library(skimr) #provides overview of data and missingness
+library(naniar) # handling missing values
+library(dplyr) # data handling
+
+
+### Modeling
+library(ranger) # random forest
+library(glmnet) # elastic net logistic regression
+library(themis) # provides up/down-sampling methods for the data
+library(lightgbm) # fast gradient-boosted machine algo
+library(bonsai) #provides parnsip objects for tree-based models
+library(stacks) # stack ML models for better perfomance
+library(vip)
+})
+
+```
+
+
+* The libraries loaded here are used for various tasks such as **data manipulation, cleaning, visualization, and machine learning**. 
+* `Tidymodels` provides a framework for modeling, `ranger` is used for Random Forest, and other libraries handle different aspects of data processing and visualization.
+
+## 2. Read and View Titanic Data  
+
+We will read the `.csv` dataset files from the **Kaggle: Titanic Dataset** (https://www.kaggle.com/c/titanic/overview), a popular dataset in ML community.
+
+```{r}
+df <- read_csv("train.csv", show_col_types = FALSE)
+
+# View data structure
+glimpse(df)
+```
+
+## 3. Check for Missing Data  
+
+We will check for **missingness** in the data, using `naniar` package.
+
+``` {r}
+naniar::miss_var_summary(df)
+```
+
+**Insights:**  
+
+* `miss_var_summary()` is used to quickly summarize the missing values in each column, it helps in understanding the extent of **missingness** in the dataset.
+* `Cabin`, `Age` and `Embarked` are having missing values.
+* Lets create a function to `clean` the data and `remove` the missing values. 
+* `Cabin` is dropped since its has a lot of missing values (**`77.1%`**).
+ 
+### Handling NAs and Data cleaning
+
+```{r echo=FALSE, warning=FALSE}
+# Get most frequent port of embarkation
+uniqx <- unique(na.omit(df$Embarked))
+mode_embarked <- as.character(fct_drop(uniqx[which.max(tabulate(match(df$Embarked, uniqx)))]))
+
+
+# Build function for data cleaning and handling NAs
+process_data <- function(tbl){
+  
+  tbl %>%
+    mutate(class = case_when(Pclass == 1 ~ "first",
+                             Pclass == 2 ~ "second",
+                             Pclass == 3 ~ "third"),
+           class = as_factor(class),
+           gender = factor(Sex),
+           fare = Fare,
+           age = Age,
+           ticket = Ticket,
+           alone = if_else(SibSp + Parch == 0, "yes", "no"), # alone variable
+           alone = as_factor(alone),
+           port = factor(Embarked), # rename embarked as port
+           title = str_extract(Name, "[A-Za-z]+\\."), # title variable
+           title = fct_lump(title, 4)) %>% # keep only most frequent levels of title
+    mutate(port = ifelse(is.na(port), mode_embarked, port), # deal w/ NAs in port (replace by mode)
+           port = as_factor(port)) %>%
+    group_by(title) %>%
+    mutate(median_age_title = median(age, na.rm = T)) %>%
+    ungroup() %>%
+    mutate(age = if_else(is.na(age), median_age_title, age)) %>% # deal w/ NAs in age (replace by median in title)
+    mutate(ticketfreq = ave(1:nrow(.), FUN = length),
+           fareadjusted = fare / ticketfreq) %>%
+    mutate(familyage = SibSp + Parch + 1 + age/70)
+  
+}
+```
+
+
+**Insights:**  
+
+* Here we replace missing values with mode for `Embarked` feature engineer it into `port` , replace missing `Age` with **mediam** values. 
+* Also create new features likes `fareadjusted` and `familyage`.
+
+### Process (Clean) the TRAINING Data
+```{r}
+dataset <- df %>%
+  process_data() %>%
+  mutate(survived = as_factor(if_else(Survived == 1, "yes", "no"))) %>%
+  mutate(survived = relevel(survived, ref = "yes")) %>% # first event is survived = yes
+  select(survived, class, gender, age, alone, port, title, fareadjusted, familyage) 
+
+# Have a look again
+glimpse(dataset)
+
+# Check for missing after data preprocessing
+naniar::miss_var_summary(dataset)  
+```
+ 
+**Insights:** 
+ * The function `process_data()` performs several **data cleaning** tasks on TRAIN dataset. 
+ * It creates new variables (like `class`, `alone`, `title`), handles ***missing*** data for `port` and `age`, and processes features like `fareadjusted` and `familyage`.
+ * The new `dataset` after cleaning is generated.
+ * There are ***no missing values*** in the data after cleaning.
+
+
+### Process (Clean) the TESTING Data
+```{r}
+test <- read_csv("test.csv", show_col_types = FALSE)
+holdout <- test %>%
+  process_data() %>%
+  select(PassengerId, class, gender, age, alone, port, title, fareadjusted, familyage) 
+
+glimpse(holdout)
+
+# Checking missing in test data
+naniar::miss_var_summary(holdout)
+
+```
+
+**Insights:** 
+ * The function `process_data()` performs several data cleaning tasks on **TEST** dataset. 
+ * Check for missing values in the data (since only 1 case is missing)
+ 
+ 
+## 4. Exploratory data analysis (EDA)
+```{r}
+# Train Data
+skimr::skim(dataset)
+```
+
+ ** `skim` ** allows to explore the structure of the `TRAIN` dataset.
+ 
+ 
+### Sumarise the data  
+
+Explore the data with summaries and plots to view the distribution or patterns in the data.
+
+```{r}
+# Survived
+dataset |>
+  group_by(survived) |>
+  summarise(n = n(),
+            n_pct = n / nrow(dataset)*100)
+dataset %>%
+  ggplot(aes(survived, color = survived, fill = survived)) +
+  geom_bar() +
+  labs(x = "Survived", y = "Count", color = "Survived?", fill = "Survived?") +
+  ggtitle(" Survived Count")
+
+
+# Survived by Gender
+dataset |>
+  group_by(gender) |>
+  summarize(n = n(),
+            n_surv = sum(survived == "yes"),
+            pct_surv = n_surv / n)
+
+# Survived by Title
+dataset %>%
+  group_by(title) %>%
+  summarize(n = n(),
+            n_surv = sum(survived == "yes"),
+            pct_surv = n_surv / n) %>%
+  arrange(desc(pct_surv))
+
+# Summary by class, gender on Survived
+dataset %>%
+  group_by(class, gender) %>%
+  summarize(n = n(),
+            n_surv = sum(survived == "yes"),
+            pct_surv = n_surv / n) %>%
+  mutate(class = fct_reorder(class, pct_surv)) %>%
+  ggplot(aes(pct_surv, class, fill = class, color = class)) +
+  geom_col(position = position_dodge()) +
+  scale_x_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(x = "% in category that survived", fill = NULL, color = NULL, y = NULL) +
+  facet_wrap(~gender)
+
+# Fareadjusted Distribution
+dataset %>%
+  ggplot(aes(fareadjusted, group = survived, color = survived, fill = survived)) +
+  geom_histogram(alpha = .4, position = position_dodge()) +
+  labs(x = "fare", y = NULL, color = "survived?", fill = "survived?")
+
+# Familyage Distribution
+dataset %>%
+  ggplot(aes(familyage, group = survived, color = survived, fill = survived)) +
+  geom_histogram(alpha = .4, position = position_dodge()) +
+  labs(x = "family aged", y = NULL, color = "survived?", fill = "survived?")
+
+```
+
+
+
+## 5. Spliting the Data  
+In machine learning, it's crucial to split the dataset into training and testing sets to evaluate model performance effectively.
+
+**Training Set:** This subset of the data is used to train the model, allowing it to learn patterns and relationships within the features (independent variables) and the target (dependent variable).
+
+**Testing Set:** After training the model, we evaluate its performance on the testing dataset. This set is not seen by the model during training, which allows us to assess how well the model generalizes to unseen data.
+
+**Stratification** ensures that the distribution of the target variable in both the training and testing sets is representative of the entire dataset. This is particularly useful when the target variable is imbalanced.
+
+**Cross-Validation (CV)** In ***k-fold cross-validation***, the training data is split into k (in this case, 5) equally-sized parts (folds). The model is trained on k-1 folds and tested on the remaining fold, and this process is repeated for each fold.  
+Provides a more robust evaluation of model performance by training and testing the model on multiple data splits.
+```{r}
+set.seed(2021) # for reproducibility
+spl <- initial_split(dataset, strata = "survived")
+train <- training(spl)
+test <- testing(spl)
+
+set.seed(123)
+train_5fold <- vfold_cv(train, v = 5, strata = survived)
+train_5fold
+```
+
+
+In this tutorial we will build the Logistic Regression Model, and Random forest (tuned). We will compare their model accuracy, roc-auc anchoose the best model for our exercise. Let's dive in
+
+
+## 6. LOGISTIC REGRESSION 
+
+### 6.1 Create a Recipe for Preprocessing
+```{r logistic-recipe}
+logistic_rec <- recipe(survived ~ ., data = train) %>%
+  step_impute_median(all_numeric()) %>%  # Impute missing values with median for numeric variables
+  step_dummy(all_nominal_predictors())   # Convert categorical variables into dummy variables
+
+```
+
+### 6.2 Basic Logistic Regression Model (No Regularization)
+We'll first define and train a basic logistic regression model without any regularization.
+
+```{r lr_model}
+logistic_model_basic <- logistic_reg(mode = "classification", 
+                                     engine = "glm")  
+```
+
+### 6.3 Set Up the Workflow
+```{r lr-wf}
+logistic_wf_basic <- workflow() %>%
+  add_model(logistic_model_basic) %>%
+  add_recipe(logistic_rec)
+
+```
+
+### 6.4 Train the Model (No Regularization)
+Since we have no regularization, there's no need for hyperparameter tuning.
+```{r lr-train model}
+logistic_fit_basic <- logistic_wf_basic %>%
+  fit(data = train)
+
+```
+
+
+### 6.5 Evaluate Model Performance
+
+#### 6.5.1 Predict and Calculte Accuracy on the Training Data
+```{r}
+train_predictions_basic <- predict(logistic_fit_basic, train, type = "class") %>%
+  bind_cols(train %>% select(survived))
+
+train_accuracy_basic <- train_predictions_basic %>%
+  accuracy(truth = survived, estimate = .pred_class)
+```
+
+#### 6.5.2 Predict and Calculte Accuracy on the Testing Data
+```{r} 
+test_predictions_basic <- predict(logistic_fit_basic, test, type = "class") %>%
+  bind_cols(test %>% select(survived)) 
+
+test_accuracy_basic <- test_predictions_basic %>%
+  accuracy(truth = survived, estimate = .pred_class)
+```
+
+#### 6.5.3 Print the Test Accuracy for Basic Logistic Regression
+```{r lr_accuracy}
+train_accuracy_basic
+test_accuracy_basic
+```
+
+#### 6.5.4 Predict and Calculate ROC-AUC on the TRAIN Set
+```{r}
+train_probabilities_basic <- predict(logistic_fit_basic, train, type = "prob") %>%
+  bind_cols(train %>% select(survived))  
+
+train_roc_auc_basic <- train_probabilities_basic %>%
+  roc_curve(truth = survived, .pred_yes)
+```
+
+#### 6.5.5 Predict and Calculate ROC-AUC on the TEST Set
+```{r}
+test_probabilities_basic <- predict(logistic_fit_basic, test, type = "prob") %>%
+  bind_cols(test %>% select(survived))
+
+test_roc_auc_basic <- test_probabilities_basic %>%
+  roc_curve(truth = survived, .pred_yes)  # Use .pred_yes for the positive class probability
+
+```
+
+#### 6.5.6 Print the ROC-AUC for Basic Logistic Regression
+```{r lr_roc_auc}
+train_roc_auc_basic
+test_roc_auc_basic
+```
+
+### 6.6 Plot the ROC Curve for train and test data
+```{r lr_roc_plot, echo=FALSE, include=FALSE, warning=FALSE}
+# Combine the training and test ROC data
+combined_roc_curve_basic <- bind_rows(
+  train_roc_auc_basic %>% mutate(Data = "Training"),
+  test_roc_auc_basic %>% mutate(Data = "Test")
+)
+
+# Create the plot using ggplot2
+library(ggplot2)
+
+combined_roc_plot_basic <- ggplot(combined_roc_curve_basic, aes(x = 1 - specificity, y = sensitivity, color = Data, linetype = Data)) +
+  geom_line(size = 1.2) +  # Make the lines thicker for better visibility
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray") +  # Add diagonal line (random classifier line)
+  scale_color_brewer(palette = "Dark2") +  # Use a color palette (similar to VIP)
+  scale_linetype_manual(values = c("solid", "solid")) +  # Different line types for train and test
+  labs(title = "ROC Curve (Training vs Test Data)",
+       x = "1 - Specificity",
+       y = "Sensitivity") +
+  theme_minimal(base_size = 14) +  # Use minimal theme with larger base font size
+  theme(
+    legend.title = element_blank(),  # Remove legend title for clarity
+    legend.position = "bottom",  # Position legend at the bottom
+    plot.title = element_text(hjust = 0.5, size = 16),  # Center title with larger font size
+    axis.title = element_text(size = 14),  # Increase axis title size
+    axis.text = element_text(size = 12),  # Increase axis text size
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around the plot
+  )
+
+# Print the combined ROC plot
+print(combined_roc_plot_basic)
+
+ggsave("lr_basic_ROC_AUC.png", plot = combined_roc_plot_basic, height = 6, width = 8, dpi = 300)
+
+```
+
+### 6.7 Feature Importance Plots - Basic Logistic Regression
+```{r lr_vip_plot, echo=FALSE, include=FALSE, warning=FALSE}
+# 1. Extract the underlying logistic regression model from the workflow
+logistic_model <- logistic_fit_basic %>% extract_fit_engine()
+
+# 2. Extract the coefficients of the logistic regression model
+logistic_coefs <- coef(logistic_model) %>%  # Extract coefficients
+  as.data.frame() %>%  # Convert to data frame
+  rownames_to_column(var = "term")  # Add the feature names (terms)
+
+# Rename the coefficient column to "Estimate"
+colnames(logistic_coefs)[2] <- "Estimate"
+
+# 3. Sort the coefficients by absolute value to determine importance
+logistic_coefs_sorted <- logistic_coefs %>%
+  filter(term != "(Intercept)") %>%  # Remove the intercept term
+  arrange(desc(abs(Estimate)))  # Sort by absolute coefficient value
+
+# 4. Create the feature importance plot using ggplot2
+p_bar_logistic <- ggplot(logistic_coefs_sorted, aes(x = reorder(term, abs(Estimate)), y = Estimate)) +
+  geom_col(fill = "steelblue") +  # Create bars for the coefficients
+  coord_flip() +  # Flip the coordinates to make the plot horizontal
+  theme_minimal() +  # Apply minimal theme
+  theme(
+    text = element_text(family = "Arial", size = 12),  # Use Arial font and adjust font size
+    axis.text = element_text(size = 10, color = "black"),  # Adjust axis labels font size and color
+    axis.title = element_text(size = 12, face = "bold"),  # Make axis titles bold
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Title customization (centered)
+    panel.grid = element_blank(),  # Remove grid lines for a cleaner look
+    panel.border = element_rect(color = "grey50", fill = NA, size = 0.5)  # Add a thin border around the plot
+  ) + 
+  ggtitle("Feature Importance for Logistic Regression Model") +  # Add a custom title
+  xlab("Predictors") +  # Customize x-axis label
+  ylab("Coefficient Value (Importance)")  # Customize y-axis label
+
+# Print the plot
+print(p_bar_logistic)
+
+# 5. Optionally, save the plot
+ggsave("lr_vip.png", plot = p_bar_logistic, height = 6, width = 8, dpi = 300)
+
+```
+
+### 6.8 Confusion Matrix on Final model
+```{r}
+# Create the confusion matrix
+conf_matrix_data <- conf_mat(test_predictions_basic, 
+                             truth = survived, 
+                             estimate = .pred_class)
+
+# Visualize the confusion matrix as a heatmap
+conf_matrix_data %>%
+  autoplot(type = "heatmap") +
+  ggtitle("Confusion Matrix Heatmap - Logistic Regression Model") +  # Add a title to the plot
+  theme_minimal()  # Apply a minimal theme
+```
+```{r}
+```
+
+
+```{r}
+```
+
+### 7. Random forests  
+**Random forests** or random decision forests is an `ensemble` learning method for ***classification, regression*** and other tasks that works by creating a multitude of decision trees during training. 
+For ***classification*** tasks, the output of the random forest is the class selected by most trees.
+
+### 7.1 Create a Recipie
+```{r rf_recipe}
+rf_rec <- recipe(survived ~ ., data = train) %>%
+  step_impute_median(all_numeric()) %>% # replace missing value by median
+  step_dummy(all_nominal_predictors()) # all factors var are split into binary terms 
+
+```
+
+### 7.2 Specify a random forest model.
+
+```{r rf_model}
+## Define the RF Model
+rf_model <- rand_forest(mode = "classification", # binary response
+                        engine = "ranger", # by default
+                        mtry = tune(),
+                        trees = tune(),
+                        min_n = tune()) # parameters to be tuned
+```
+
+
+### 7.3 Set Up the RF workflow.
+```{r rf-wf}
+rf_wf <- 
+  workflow() %>% 
+  add_model(rf_model) %>% 
+  add_recipe(rf_rec)
+```
+
+
+### 7.4 Use cross-validation to evaluate our model with different param config.
+```{r}
+# Perform tuning using race anova
+rf_tune <- rf_wf %>%
+  tune_race_anova(
+    train_5fold,  # Your cross-validation splits
+    grid = 50,    # Grid size
+    param_info = rf_model %>% 
+    parameters(),  # Hyperparameters to tune
+    metrics = metric_set(accuracy, roc_auc),  # Performance metric
+    control = control_race(verbose_elim = TRUE)  # Control parameters
+  )
+```
+
+### 7.5 Visualize the results.  
+Plotting the results of the tuning process highlights that both mtry (number of predictors at each node) and min_n (minimum number of data points required to keep splitting) should be fairly small to optimize performance.
+```{r rf_autoplot}
+autoplot(rf_tune)
+```
+
+Let’s select the best model according to the ROC AUC metric. Our final tuning parameter values are:
+
+### 7.6  Examine the Final Tuned Hyperparameters  
+The random forest model clearly performed better than the logistic regression model, and would be our best bet for predicting.
+```{r rf_best_para}
+best_rf_tune_acc <- rf_tune %>% 
+  show_best(metric = "accuracy", n=1)  # Or "roc_auc" if you want to use AUC
+best_rf_tune_acc
+
+best_rf_tune_roc <- rf_tune %>% 
+  show_best(metric = "roc_auc", n=1)  # Or "roc_auc" if you want to use AUC
+best_rf_tune_roc
+```
+
+
+### 7.7 Build the model using the best hyperparmetes  
+Use the `best hyperparameters` to define the **final model**, and then fit it on the entire training dataset.  
+Finalize the model using the best hyperparameters
+
+```{r final_model}
+rf_final_model <- rand_forest(
+  trees = best_rf_tune_acc$trees[1],  # Best number of trees
+  mtry = best_rf_tune_acc$mtry[1]   # Best mtry value
+) %>%
+  set_engine("ranger", importance = "permutation") %>%
+  set_mode("classification")
+rf_final_model
+
+# Train the final model on the full training data
+final_rf_fit <- rf_final_model %>%
+  fit(survived ~ ., data = train)
+final_rf_fit
+```
+
+To filter the predictions for only our `best` random forest model, we can use the parameters argument and pass it our tibble with the best hyperparameter values from tuning, which we called `rf_final_model`.
+
+
+### 7.8 Feature importance plot for the final model  
+We can extract out the fit from the workflow object, and then use the `vip` package to visualize the `variable importance scores` for the top features
+
+```{r ef_vip, echo=FALSE, include=FALSE, warning=FALSE}
+set.seed(825)  # for reproducibility
+
+p_bar_rf <- vip(final_rf_fit, geom = "col")  # Create the plot with bars
+p_bar_rf + 
+  theme_minimal() +  # Apply minimal theme for a clean look
+  theme(
+    text = element_text(family = "Arial", size = 12),  # Use Arial font and adjust font size
+    axis.text = element_text(size = 10, color = "black"),  # Adjust axis labels font size and color
+    axis.title = element_text(size = 12, face = "bold"),  # Make axis titles bold
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Title customization (centered)
+    legend.position = "none",  # Remove legend (optional if it's not needed)
+    panel.grid = element_blank(),  # Remove grid lines for a cleaner look
+    panel.border = element_rect(color = "grey50", fill = NA, size = 0.5)  # Add a thin border around the plot
+  ) + 
+  ggtitle("RF - Variable Importance of Features") +  # Add a custom title
+  xlab("Predictors") +  # Customize x-axis label
+  ylab("Importance")  # Customize y-axis label
+
+# Save the plot with custom size
+ggsave("RF_VIP.png", plot = p_bar_rf, height = 6, width = 8, dpi = 300)
+```
+
+
+### 7.9 Evaluate Model Performance
+
+#### 7.9.1 Predict and Calculate Accuracy on Training data
+```{r}
+train_predictions_rf_acc <- predict(final_rf_fit, train, type = "class") %>%
+  bind_cols(train %>% select(survived))  # Add the true labels back
+
+train_accuracy_rf_acc <- train_predictions_rf_acc %>%
+  accuracy(truth = survived, estimate = .pred_class)
+```
+
+
+#### 7.9.2 Predict and Calculate Accuracy on testing data
+```{r}
+test_predictions_rf_acc <- predict(final_rf_fit, test, type = "class") %>%
+  bind_cols(test %>% select(survived))  # Add the true labels back
+
+test_accuracy_rf_acc <- test_predictions_rf_acc %>%
+  accuracy(truth = survived, estimate = .pred_class)
+```
+
+
+#### 7.9.3 Print the Accuracy
+
+```{r}
+train_accuracy_rf_acc
+test_accuracy_rf_acc
+```
+
+
+#### 7.9.4 Predict and Calculate ROC-AUC on Training data
+```{r}
+train_probabilities_rf_roc <- predict(final_rf_fit, train, type = "prob") %>%
+  bind_cols(train %>% select(survived))  # Add the true labels back
+
+train_roc_auc_rf_roc <- train_probabilities_rf_roc %>%
+  roc_curve(truth = survived, .pred_yes)  # Use .pred_yes for the positive class probability
+```
+
+#### 7.9.5 Predict and Calculate ROC-AUC on Testing data
+```{r}
+test_probabilities_rf_roc <- predict(final_rf_fit, test, type = "prob") %>%
+  bind_cols(test %>% select(survived))  # Add the true labels back
+
+test_roc_auc_rf_roc <- test_probabilities_rf_roc %>%
+  roc_curve(truth = survived, .pred_yes)  # Use .pred_yes for the positive class probability
+```
+
+
+#### 7.9.6 Print the ROC AUC
+```{r}
+head(train_roc_auc_rf_roc)
+head(test_roc_auc_rf_roc)
+```
+
+
+### 7.10 Plot the ROC Curve for train and test data
+```{r rf_roc_plot, echo=FALSE, include=FALSE, warning=FALSE}
+# Combine the training and testing ROC data
+combined_roc_curve_rf <- bind_rows(
+  train_roc_auc_rf_roc %>% mutate(Data = "Training"),
+  test_roc_auc_rf_roc %>% mutate(Data = "Test")
+)
+
+
+
+# Plot ROC curve
+roc_plot_rf <- ggplot(combined_roc_curve_rf, aes(x = 1 - specificity, y = sensitivity, color = Data, linetype = Data)) +
+  geom_line(size = 1.2) + 
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray") + 
+  scale_color_brewer(palette = "Dark2") + 
+  scale_linetype_manual(values = c("solid", "solid")) + 
+  labs(title = "ROC Curve RF (Training vs Test Data)", x = "1 - Specificity", y = "Sensitivity") +
+  theme_minimal(base_size = 14) + 
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+# Print the combined ROC plot
+print(roc_plot_rf)
+
+# Save the ROC Plot
+# You can save the ROC plot for later use.
+
+ggsave("RF_final_roc_plot.png", plot = roc_plot_rf, height = 6, width = 8, dpi = 300)
+```
+
+### 7.11 Confusion Matrix on Final model
+```{r}
+# Create the confusion matrix
+conf_matrix_data <- conf_mat(test_predictions_rf_acc, 
+                             truth = survived, 
+                             estimate = .pred_class)
+
+# Visualize the confusion matrix as a heatmap
+conf_matrix_data %>%
+  autoplot(type = "heatmap") +
+  ggtitle("Confusion Matrix Heatmap - Random Forest Model") +  # Add a title to the plot
+  theme_minimal()  # Apply a minimal theme
+```
+
