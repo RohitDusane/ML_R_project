@@ -1,4 +1,4 @@
-# Titanic Machine Learning Model: Random Forest & Logistic Regression
+# Predicting Titanic Passenger Survival with RStudio: `Random Forest` & `Logistic Regression` using `Tidymodels`
 
 ## Project Summary
 
