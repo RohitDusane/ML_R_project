@@ -1,5 +1,5 @@
 # Predicting Titanic Passenger Survival with RStudio: `Random Forest` & `Logistic Regression` using `Tidymodels`
-
+![Titanic Survival Prediction](./titanic.jpg)
 ## Project Summary
 
 This project explores machine learning techniques for predicting the survival of passengers aboard the Titanic. The primary focus is on applying **Random Forest** and **Logistic Regression** models to the Titanic dataset using the **tidymodels** package in R. The Titanic dataset is a well-known dataset that contains information about passengers, including whether they survived or not, and various attributes such as age, class, sex, and the number of siblings/spouses aboard.
@@ -20,7 +20,7 @@ The objective of this project is to:
 ## Study Plan & Steps
 
 ### Step 1: Data Exploration and Preprocessing
-- **Load the Titanic dataset** from the `titanic` package or directly from a CSV file.![Titanic Dataset Overview](https://www.geeksforgeeks.org/wp-content/uploads/titanic-dataset.jpg)
+- **Load the Titanic dataset** from the `titanic` package or directly from a CSV file.
 - **Examine the dataset** to understand its structure, missing values, and outliers.
 - Perform **data cleaning**: Handle missing values, outliers, and any necessary transformations on categorical variables (e.g., encoding 'Sex', 'Embarked').
 - **Feature Engineering**: Create new features, such as family size age, and possibly remove redundant or irrelevant features.
@@ -44,7 +44,7 @@ The objective of this project is to:
 
 ### Step 5: Interpretation and Conclusion
 - Analyze the importance of the variables in both models, especially for the Random Forest model.
-- Discuss which `**features**` contribute most to the survival prediction.![RF - VIP](./RF_VIP.png)
+- Discuss which `features` contribute most to the survival prediction.![RF - VIP](./RF_VIP.png)
 - Evaluate the results in terms of model performance and interpretability.
 
 ## Conclusion & Next Steps
