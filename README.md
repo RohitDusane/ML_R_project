@@ -1,5 +1,5 @@
 # Predicting Titanic Passenger Survival with RStudio: `Random Forest` & `Logistic Regression` using `Tidymodels`
-![Titanic Survival Prediction](./titanic.jpg)
+![Titanic Survival Prediction](images/titanic.jpg)
 ## Project Summary
 
 This project explores machine learning techniques for predicting the survival of passengers aboard the Titanic. The primary focus is on applying **Random Forest** and **Logistic Regression** models to the Titanic dataset using the **tidymodels** package in R. The Titanic dataset is a well-known dataset that contains information about passengers, including whether they survived or not, and various attributes such as age, class, sex, and the number of siblings/spouses aboard.
@@ -7,7 +7,7 @@ This project explores machine learning techniques for predicting the survival of
 The project aims to compare the ***performance of both models*** and evaluate their **effectiveness** in predicting passenger `survival`.
 
 ## Key R Markdown File
-This project contains an important `.Rmd` file that demonstrates moeddling using `tidymodel`. You can view the R Markdown file here: [ML Model Markdown file](MN_TM.Rmd).
+This project contains an important `.Rmd` file that demonstrates moeddling using `tidymodel`. You can view the R Markdown file here: [ML Model Markdown file](code/MN_TM.Rmd).
 
 ## Objective
 
@@ -38,13 +38,13 @@ The objective of this project is to:
   - Use `logistic_reg()` from **tidymodels** to define and train the Logistic Regression model.
 
 ### Step 4: Model Evaluation
-- Evaluate the models using appropriate metrics such as accuracy, and **AUC**.![RF - ROC AUC](./RF_final_roc_plot.png)
+- Evaluate the models using appropriate metrics such as accuracy, and **AUC**.![RF - ROC AUC](images/RF_final_roc_plot.png)
 - Compare the performance of the two models using the testing set and resampling methods.
 - Visualize the confusion matrix and ROC curves for both models.
 
 ### Step 5: Interpretation and Conclusion
 - Analyze the importance of the variables in both models, especially for the Random Forest model.
-- Discuss which `features` contribute most to the survival prediction.![RF - VIP](./RF_VIP.png)
+- Discuss which `features` contribute most to the survival prediction.![RF - VIP](images/RF_VIP.png)
 - Evaluate the results in terms of model performance and interpretability.
 
 ## Conclusion & Next Steps
