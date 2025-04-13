@@ -20,7 +20,7 @@ The objective of this project is to:
 ## Study Plan & Steps
 
 ### Step 1: Data Exploration and Preprocessing
-- **Load the Titanic dataset** from the `titanic` package or directly from a CSV file.
+- **Load the Titanic dataset** from the `titanic` package or directly from a CSV file. ![Titanic Dataset Overview](https://www.geeksforgeeks.org/wp-content/uploads/titanic-dataset.jpg)
 - **Examine the dataset** to understand its structure, missing values, and outliers.
 - Perform **data cleaning**: Handle missing values, outliers, and any necessary transformations on categorical variables (e.g., encoding 'Sex', 'Embarked').
 - **Feature Engineering**: Create new features, such as family size age, and possibly remove redundant or irrelevant features.
