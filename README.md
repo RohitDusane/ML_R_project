@@ -20,7 +20,7 @@ The objective of this project is to:
 ## Study Plan & Steps
 
 ### Step 1: Data Exploration and Preprocessing
-- **Load the Titanic dataset** from the `titanic` package or directly from a CSV file. ![Titanic Dataset Overview](https://www.geeksforgeeks.org/wp-content/uploads/titanic-dataset.jpg)
+- **Load the Titanic dataset** from the `titanic` package or directly from a CSV file.![Titanic Dataset Overview](https://www.geeksforgeeks.org/wp-content/uploads/titanic-dataset.jpg)
 - **Examine the dataset** to understand its structure, missing values, and outliers.
 - Perform **data cleaning**: Handle missing values, outliers, and any necessary transformations on categorical variables (e.g., encoding 'Sex', 'Embarked').
 - **Feature Engineering**: Create new features, such as family size age, and possibly remove redundant or irrelevant features.
@@ -38,13 +38,13 @@ The objective of this project is to:
   - Use `logistic_reg()` from **tidymodels** to define and train the Logistic Regression model.
 
 ### Step 4: Model Evaluation
-- Evaluate the models using appropriate metrics such as accuracy, and AUC.
+- Evaluate the models using appropriate metrics such as accuracy, and **AUC**.![RF - ROC AUC](./RF_final_roc_plot.png)
 - Compare the performance of the two models using the testing set and resampling methods.
 - Visualize the confusion matrix and ROC curves for both models.
 
 ### Step 5: Interpretation and Conclusion
 - Analyze the importance of the variables in both models, especially for the Random Forest model.
-- Discuss which features contribute most to the survival prediction.
+- Discuss which `**features**` contribute most to the survival prediction.![RF - VIP](./RF_VIP.png)
 - Evaluate the results in terms of model performance and interpretability.
 
 ## Conclusion & Next Steps
